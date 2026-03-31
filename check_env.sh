@@ -1,6 +1,6 @@
 #!/bin/bash
 # 环境检查脚本 - 检查运行 batch_creator.py 和 batch_import.py 所需的一切
-set -e
+set +e
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
