@@ -88,14 +88,15 @@ def extract_listing_url(detail_url):
 
 # ── CSV 解析 ──────────────────────────────────────────
 def parse_csv(file_content):
-    """解析 CSV 内容，返回 [{company_name, url}, ...]"""
+    """解析 CSV 内容，返回 [{company_name, url, channel}, ...]"""
     results = []
     reader = csv.DictReader(io.StringIO(file_content))
     for row in reader:
         name = (row.get("company_name") or "").strip()
         url = (row.get("url") or "").strip()
-        if name and url:
-            results.append({"company_name": name, "url": url})
+        channel = (row.get("channel") or "").strip()
+        if name:
+            results.append({"company_name": name, "url": url, "channel": channel})
     return results
 
 
@@ -218,7 +219,8 @@ def process_batch(companies):
 
         idx = i + 1
         cname = company["company_name"]
-        url = company["url"]
+        url = company.get("url") or ""
+        channel = company.get("channel") or ""
         result = {
             "index": idx,
             "total": total,
@@ -226,14 +228,15 @@ def process_batch(companies):
             "name": "",
             "credit_code": "",
             "url": url,
+            "channel": channel,
             "status": "",
             "status_type": "",
             "message": "",
             "company_id": None,
         }
 
-        # a. URL 去重
-        if url in existing_urls:
+        # a. URL 去重（仅在 url 非空时检查）
+        if url and url in existing_urls:
             result["status"] = "已跳过（重复）"
             result["status_type"] = "skipped"
             result["message"] = "URL 已存在"
@@ -279,7 +282,8 @@ def process_batch(companies):
                 result["message"] = msg
                 stats["success"] += 1
             # 加入去重集合
-            existing_urls.add(url)
+            if url:
+                existing_urls.add(url)
             existing_names.add(name)
         else:
             result["status"] = "创建失败"
@@ -327,7 +331,7 @@ def upload_csv():
     content = f.read().decode("utf-8-sig")
     loaded_companies = parse_csv(content)
     if not loaded_companies:
-        return jsonify({"error": "CSV 解析结果为空，请检查格式（需包含 company_name 和 url 列）"}), 400
+        return jsonify({"error": "CSV 解析结果为空，请检查格式（需包含 company_name 列）"}), 400
     return jsonify({
         "count": len(loaded_companies),
         "companies": loaded_companies,
@@ -462,7 +466,7 @@ def stop_generate():
 @app.route("/api/template")
 def download_template():
     """下载 CSV 模板"""
-    content = "company_name,url\n示例公司名称,https://example.jobs.feishu.cn/index\n"
+    content = "company_name,url,channel\n示例公司A,https://example.jobs.feishu.cn/index,\n示例公司B,,moka\n示例公司C,https://campus.example.com/index,boss\n"
     return Response(
         content,
         mimetype="text/csv",
@@ -782,7 +786,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
       </div>
       <div class="upload-area" id="upload-area" onclick="document.getElementById('csv-input').click()">
         <div style="font-size:14px;font-weight:500;">点击上传 CSV 文件</div>
-        <div class="upload-hint">格式：company_name, url</div>
+        <div class="upload-hint">格式：company_name, url（可选）, channel（可选）</div>
         <input type="file" id="csv-input" accept=".csv" onchange="uploadCSV(this)">
       </div>
     </div>
@@ -793,13 +797,17 @@ HTML_PAGE = r"""<!DOCTYPE html>
     <h2>预览 (<span id="preview-count">0</span> 家公司)</h2>
     <div class="table-wrap preview-table">
       <table>
-        <thead><tr><th>#</th><th>公司名称</th><th>URL</th></tr></thead>
+        <thead><tr><th>#</th><th>公司名称</th><th>URL</th><th>渠道</th></tr></thead>
         <tbody id="preview-body"></tbody>
       </table>
     </div>
-    <div style="margin-top:16px;">
+    <div style="margin-top:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
       <button class="btn btn-success" onclick="startBatch()" id="btn-start">开始创建</button>
       <button class="btn btn-outline" onclick="stopBatch()" id="btn-stop" style="display:none;border-color:var(--red);color:var(--red);">停止</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;user-select:none;">
+        <input type="checkbox" id="auto-generate" checked>
+        <span>创建完成后自动 Generate</span>
+      </label>
     </div>
   </div>
 
@@ -822,7 +830,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
       <table>
         <thead><tr>
           <th style="width:30px;"><input type="checkbox" id="check-all" onchange="toggleCheckAll(this)" title="全选"></th>
-          <th>#</th><th>公司全称</th><th>简称</th><th>信用代码</th><th>URL</th><th>状态</th><th>备注</th><th>操作</th>
+          <th>#</th><th>公司全称</th><th>简称</th><th>信用代码</th><th>URL</th><th>渠道</th><th>状态</th><th>备注</th><th>操作</th>
         </tr></thead>
         <tbody id="result-body"></tbody>
       </table>
@@ -880,7 +888,8 @@ function showPreview(data) {
   tbody.innerHTML = '';
   data.forEach((c, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${i+1}</td><td>${esc(c.company_name)}</td><td class="url-cell"><a href="${esc(c.url)}" target="_blank">${esc(c.url)}</a></td>`;
+    const urlDisplay = c.url ? `<a href="${esc(c.url)}" target="_blank">${esc(c.url)}</a>` : '-';
+    tr.innerHTML = `<td>${i+1}</td><td>${esc(c.company_name)}</td><td class="url-cell">${urlDisplay}</td><td>${esc(c.channel || '')}</td>`;
     tbody.appendChild(tr);
   });
   document.getElementById('preview-card').style.display = '';
@@ -993,13 +1002,15 @@ function addResultRow(d) {
     actionHtml = `<button class="btn btn-primary btn-sm" onclick="editRow(this, ${d.index})">编辑</button>`;
   }
 
+  const urlHtml = d.url ? `<a href="${esc(d.url)}" target="_blank">${esc(d.url)}</a>` : '-';
   tr.innerHTML = `
     <td>${checkboxHtml}</td>
     <td>${d.index}</td>
     <td>${esc(d.company_name)}</td>
     <td class="name-cell">${esc(d.name)}</td>
     <td class="cc-cell" style="font-family:monospace;font-size:12px;">${esc(d.credit_code)}</td>
-    <td class="url-cell"><a href="${esc(d.url)}" target="_blank">${esc(d.url)}</a></td>
+    <td class="url-cell">${urlHtml}</td>
+    <td>${esc(d.channel || '')}</td>
     <td class="status-cell"><span class="badge ${badgeCls}">${esc(d.status)}</span></td>
     <td class="msg-cell" style="font-size:12px;color:var(--text2);">${esc(d.message)}</td>
     <td class="action-cell">${actionHtml}</td>`;
@@ -1009,6 +1020,7 @@ function addResultRow(d) {
   tr.dataset.name = d.name || '';
   tr.dataset.creditCode = d.credit_code || '';
   tr.dataset.url = d.url || '';
+  tr.dataset.channel = d.channel || '';
 
   tbody.appendChild(tr);
   tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1127,6 +1139,15 @@ function batchFinished() {
   document.getElementById('btn-stop').style.display = 'none';
   document.getElementById('btn-stop').disabled = false;
   updateGenSection();
+  // 自动 Generate
+  if (document.getElementById('auto-generate').checked) {
+    const ids = getAllIds();
+    if (ids.length > 0) {
+      const el = document.getElementById('status-msg');
+      el.textContent = '创建完成，自动开始 Generate...';
+      setTimeout(() => startGenerate(ids), 500);
+    }
+  }
 }
 
 function updateGenSection() {
