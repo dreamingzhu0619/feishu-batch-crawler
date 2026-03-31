@@ -32,7 +32,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "feishu_companies.json")
 
-PLATFORM_BASE_URL = "http://localhost:6666"
+PLATFORM_BASE_URL = "http://192.168.253.10:9097"
 TIANYANCHA_URL = "http://192.168.253.10:8083/tianyancha/open/ic"
 DASHBOARD_PORT = 8888
 
