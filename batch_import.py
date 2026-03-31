@@ -67,10 +67,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,monospace;ba
 .header .runtime{color:#8b949e;font-size:13px}
 .controls{display:flex;gap:8px}
 .controls button{padding:6px 16px;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;transition:.2s}
+.btn-start{background:#238636;color:#fff}.btn-start:hover{background:#2ea043}
 .btn-pause{background:#d29922;color:#000}.btn-pause:hover{background:#e3b341}
 .btn-resume{background:#238636;color:#fff}.btn-resume:hover{background:#2ea043}
 .btn-stop{background:#da3633;color:#fff}.btn-stop:hover{background:#f85149}
-.btn-pause:disabled,.btn-resume:disabled,.btn-stop:disabled{opacity:.4;cursor:not-allowed}
+.btn-start:disabled,.btn-pause:disabled,.btn-resume:disabled,.btn-stop:disabled{opacity:.4;cursor:not-allowed}
 .cards{display:flex;gap:12px;padding:16px 24px;flex-wrap:wrap}
 .card{background:#161822;border:1px solid #2a2d3a;border-radius:8px;padding:14px 20px;min-width:120px;text-align:center}
 .card .num{font-size:28px;font-weight:700}.card .lbl{font-size:11px;color:#8b949e;margin-top:2px}
@@ -119,9 +120,10 @@ tr:hover{background:#1c2030}
   <h1>Feishu Batch Import</h1>
   <span class="runtime" id="runtime">--:--:--</span>
   <div class="controls">
-    <button class="btn-pause" id="btnPause" title="暂停提交新任务，已提交到平台的任务继续执行">⏸ Pause</button>
+    <button class="btn-start" id="btnStart" title="开始执行任务">▶ Start</button>
+    <button class="btn-pause" id="btnPause" style="display:none" title="暂停提交新任务，已提交到平台的任务继续执行">⏸ Pause</button>
     <button class="btn-resume" id="btnResume" style="display:none" title="恢复提交新任务">▶ Resume</button>
-    <button class="btn-stop" id="btnStop" title="取消所有排队任务并退出脚本">⏹ Stop</button>
+    <button class="btn-stop" id="btnStop" style="display:none" title="取消所有排队任务并退出脚本">⏹ Stop</button>
   </div>
 </div>
 <div class="cards" id="cards"></div>
@@ -246,11 +248,15 @@ async function poll(){
     document.getElementById('runtime').textContent=elapsed(Date.now()-startTime.getTime());
     renderCards(d.summary);renderBars(d.summary);renderTable(d.tasks);renderGlobalLogs(d.global_logs||[]);
     paused=d.paused||false;
-    document.getElementById('btnPause').style.display=paused?'none':'';
-    document.getElementById('btnResume').style.display=paused?'':'none';
+    const started=d.started||false;
+    document.getElementById('btnStart').style.display=started?'none':'';
+    document.getElementById('btnPause').style.display=(started&&!paused)?'':'none';
+    document.getElementById('btnResume').style.display=(started&&paused)?'':'none';
+    document.getElementById('btnStop').style.display=started?'':'none';
   }catch(e){console.error('Poll error:',e)}
 }
 
+document.getElementById('btnStart').onclick=async()=>{await fetch(`${API}/control/start`,{method:'POST'})};
 document.getElementById('btnPause').onclick=async()=>{await fetch(`${API}/control/pause`,{method:'POST'})};
 document.getElementById('btnResume').onclick=async()=>{await fetch(`${API}/control/resume`,{method:'POST'})};
 document.getElementById('btnStop').onclick=()=>document.getElementById('confirmOverlay').classList.add('show');
@@ -460,7 +466,8 @@ class BatchOrchestrator:
         self.dry_run = dry_run
         self.skip_crawl = skip_crawl
         self.filter_keyword = filter_keyword
-        self._paused = False
+        self._paused = True
+        self._started = False
         self._shutdown = False
         self._start_time = datetime.now()
         self._global_logs: list[str] = []
@@ -728,6 +735,14 @@ class BatchOrchestrator:
             self._global_log("DRY RUN complete. Exiting.")
             return
 
+        # 等待用户点击"开始"
+        self._global_log(f"已加载 {len(self.tasks)} 家公司，等待用户点击「开始」...")
+        while not self._started and not self._shutdown:
+            await asyncio.sleep(0.5)
+        if self._shutdown:
+            return
+        self._paused = False
+
         # Phase 1: Submit all tasks (enrich → create → generate)
         self._global_log("=== Phase 1: Submit ===")
         for task in self.tasks:
@@ -824,6 +839,7 @@ class BatchOrchestrator:
         return {
             "start_time": self._start_time.isoformat(),
             "paused": self._paused,
+            "started": self._started,
             "shutdown": self._shutdown,
             "summary": self.get_summary(),
             "tasks": [
@@ -878,6 +894,18 @@ async def api_logs(company_name: str):
         if t.company_name == company_name:
             return JSONResponse({"logs": t.logs})
     return JSONResponse({"logs": []})
+
+
+@app.post("/api/control/start")
+async def control_start():
+    if orchestrator:
+        if orchestrator._started:
+            return {"status": "already started"}
+        orchestrator._started = True
+        orchestrator._paused = False
+        orchestrator._global_log("▶ START by user")
+        return {"status": "started"}
+    return JSONResponse({"error": "not initialized"}, status_code=503)
 
 
 @app.post("/api/control/pause")
