@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>批量创建公司</title>
+  <script src="/static/vue.global.prod.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; background: #f5f7fa; padding: 24px; color: #303133; }
+    .container { max-width: 1500px; margin: 0 auto; }
+    h1 { font-size: 22px; margin-bottom: 20px; }
+    .card { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+    /* 渠道按钮区 */
+    .platform-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+    .platform-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 16px; border: 2px solid #e4e7ed; border-radius: 12px; cursor: pointer; transition: all .2s; background: #fff; }
+    .platform-card:hover { border-color: #409eff; background: #ecf5ff; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(64,158,255,.15); }
+    .platform-card.loading { opacity: .6; pointer-events: none; }
+    .platform-icon { font-size: 36px; }
+    .platform-name { font-size: 16px; font-weight: 600; color: #303133; }
+    .platform-count { font-size: 13px; color: #909399; }
+    .platform-count .num { font-size: 18px; font-weight: 600; color: #409eff; }
+
+    /* 上传区域 */
+    .upload-area { border: 2px dashed #dcdfe6; border-radius: 8px; padding: 32px; text-align: center; cursor: pointer; transition: border-color .2s; }
+    .upload-area:hover { border-color: #409eff; }
+    .upload-area input { display: none; }
+    .upload-area p { color: #909399; margin-top: 8px; font-size: 14px; }
+    .upload-area .icon { font-size: 40px; }
+
+    /* 信息栏 */
+    .info-bar { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+    .info-bar .label { font-size: 13px; color: #909399; }
+    .info-bar .value { font-size: 14px; color: #303133; font-weight: 500; }
+    .note-input { border: 1px solid #dcdfe6; border-radius: 4px; padding: 4px 10px; font-size: 14px; width: 360px; outline: none; transition: border-color .2s; }
+    .note-input:focus { border-color: #409eff; }
+
+    /* 按钮 */
+    .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 20px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; color: #fff; transition: opacity .2s; white-space: nowrap; }
+    .btn:hover { opacity: .85; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary { background: #409eff; }
+    .btn-success { background: #67c23a; }
+    .btn-warning { background: #e6a23c; }
+    .btn-danger { background: #f56c6c; }
+    .btn-info { background: #909399; }
+    .btn-purple { background: #7c3aed; }
+    .btn-default { background: #fff; color: #606266; border: 1px solid #dcdfe6; }
+    .btn-default:hover { color: #409eff; border-color: #c6e2ff; }
+    .btn-count { background: rgba(255,255,255,.3); padding: 1px 8px; border-radius: 10px; font-size: 12px; }
+    .btn-sm { padding: 4px 12px; font-size: 12px; }
+
+    /* 进度 */
+    .progress-bar { width: 100%; height: 8px; background: #ebeef5; border-radius: 4px; overflow: hidden; margin: 12px 0; }
+    .progress-bar .fill { height: 100%; background: #409eff; transition: width .15s; border-radius: 4px; }
+    .progress-text { font-size: 13px; color: #606266; }
+
+    /* 提示 */
+    .alert { padding: 10px 16px; border-radius: 6px; margin-top: 16px; font-size: 14px; }
+    .alert-success { background: #f0f9eb; color: #67c23a; border: 1px solid #e1f3d8; }
+    .alert-error { background: #fef0f0; color: #f56c6c; border: 1px solid #fde2e2; }
+
+    /* 表格 */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #fafafa; font-weight: 500; text-align: left; padding: 10px 12px; border-bottom: 2px solid #ebeef5; white-space: nowrap; }
+    td { padding: 8px 12px; border-bottom: 1px solid #ebeef5; }
+    tr:hover td { background: #f5f7fa; }
+    tr.selected td { background: #ecf5ff; }
+    tr.row-skipped td { background: #fafafa; color: #c0c4cc; }
+    .empty-cell { color: #c0c4cc; }
+
+    /* 复选框 */
+    input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: #409eff; }
+
+    /* 状态标签 */
+    .tag { display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
+    .tag-gray { background: #f4f4f5; color: #909399; }
+    .tag-green { background: #f0f9eb; color: #67c23a; }
+    .tag-orange { background: #fdf6ec; color: #e6a23c; }
+    .tag-red { background: #fef0f0; color: #f56c6c; }
+    .tag-blue { background: #ecf5ff; color: #409eff; }
+    .tag-purple { background: #f3e8ff; color: #7c3aed; }
+
+    /* 批次列表 */
+    .batch-row { cursor: pointer; transition: background .15s; }
+    .batch-row:hover td { background: #ecf5ff; }
+    .batch-note-input { border: 1px solid transparent; background: transparent; padding: 2px 6px; font-size: 13px; width: 200px; outline: none; border-radius: 4px; }
+    .batch-note-input:hover, .batch-note-input:focus { border-color: #dcdfe6; background: #fff; }
+
+    /* 异常面板 */
+    .issue-panel { border: 1px solid #fde2e2; border-radius: 8px; padding: 16px; background: #fff; }
+    .issue-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+    .issue-tag { padding: 4px 12px; border-radius: 16px; font-size: 12px; cursor: pointer; transition: all .15s; border: 1px solid transparent; }
+    .issue-tag:hover { opacity: .8; }
+    .issue-tag.active { border-color: #303133; font-weight: 600; }
+
+    /* 异常面板编辑输入框 */
+    .issue-input { border: 1px solid #dcdfe6; border-radius: 4px; padding: 3px 6px; font-size: 12px; width: 100%; min-width: 80px; outline: none; transition: border-color .2s; }
+    .issue-input:focus { border-color: #409eff; }
+    .issue-select { border: 1px solid #dcdfe6; border-radius: 4px; padding: 3px 4px; font-size: 12px; outline: none; background: #fff; cursor: pointer; }
+    .issue-select:focus { border-color: #409eff; }
+
+    /* 返回按钮 */
+    .back-btn { display: inline-flex; align-items: center; gap: 4px; color: #409eff; cursor: pointer; font-size: 14px; margin-bottom: 16px; }
+    .back-btn:hover { opacity: .7; }
+
+    /* 区域标题 */
+    .section-title { font-size: 15px; font-weight: 500; margin-bottom: 16px; color: #303133; display: flex; align-items: center; gap: 8px; }
+    .section-title .icon { font-size: 18px; }
+  </style>
+</head>
+<body>
+<div id="app" class="container">
+
+  <!-- ====== 批次列表页 ====== -->
+  <template v-if="!currentBatchId">
+    <h1>批量创建公司</h1>
+
+    <!-- 渠道加载 -->
+    <div class="card">
+      <div class="section-title"><span class="icon">&#x1F4E6;</span> 从渠道加载</div>
+      <div class="platform-grid">
+        <div v-for="p in platformList" :key="p.key"
+             class="platform-card" :class="{loading: loadingPlatform === p.key}"
+             @click="loadPlatform(p.key)">
+          <div class="platform-icon">{{ p.icon }}</div>
+          <div class="platform-name">{{ p.label }}</div>
+          <div class="platform-count">
+            <template v-if="platformCounts[p.key] !== undefined">
+              <span class="num">{{ platformCounts[p.key] }}</span> 家公司
+            </template>
+            <template v-else>加载中...</template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CSV 上传 -->
+    <div class="card">
+      <div class="section-title"><span class="icon">&#x1F4C4;</span> CSV 上传</div>
+      <div class="upload-area" @click="$refs.csvInput.click()">
+        <div class="icon">&#x1F4C1;</div>
+        <p>点击上传 CSV 文件（company_name + url 两列必填）</p>
+        <input ref="csvInput" type="file" accept=".csv" @change="onUpload">
+      </div>
+      <div style="text-align:center; margin-top:12px;">
+        <a href="/api/template" style="color:#409eff; font-size:13px;">下载 CSV 模板</a>
+      </div>
+    </div>
+
+    <!-- 批次历史 -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <span style="font-size:15px; font-weight:500;">历史批次（{{ batches.length }}）</span>
+        <button class="btn btn-default btn-sm" @click="loadBatches">刷新</button>
+      </div>
+      <div v-if="!batches.length" style="text-align:center; padding:40px; color:#909399;">暂无批次</div>
+      <div class="table-wrap" v-else>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:50px;">#</th>
+              <th>创建时间</th>
+              <th>来源</th>
+              <th style="width:80px;">公司数</th>
+              <th style="width:160px;">状态</th>
+              <th>备注</th>
+              <th style="width:80px;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(b, i) in batches" :key="b.batch_id" class="batch-row">
+              <td @click="enterBatch(b.batch_id)">{{ i + 1 }}</td>
+              <td @click="enterBatch(b.batch_id)">{{ b.created_at }}</td>
+              <td @click="enterBatch(b.batch_id)">
+                <span class="tag" :class="sourceTag(b.source)">{{ sourceLabel(b.source) }}</span>
+              </td>
+              <td @click="enterBatch(b.batch_id)">{{ b.row_count }}</td>
+              <td @click="enterBatch(b.batch_id)"><span class="tag" :class="batchStatusTag(b.status)">{{ b.status }}</span></td>
+              <td>
+                <input class="batch-note-input" :value="b.note" @blur="saveBatchNote(b.batch_id, $event.target.value)" @keyup.enter="$event.target.blur()" @click.stop placeholder="备注...">
+              </td>
+              <td>
+                <button class="btn btn-danger btn-sm" @click.stop="deleteBatch(b.batch_id, b.row_count)">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <!-- ====== 批次详情页 ====== -->
+  <template v-if="currentBatchId">
+    <div class="back-btn" @click="goBack">&larr; 返回批次列表</div>
+    <h1>批次详情</h1>
+
+    <!-- Info Bar -->
+    <div class="card">
+      <div class="info-bar">
+        <div>
+          <span class="label">创建时间：</span>
+          <span class="value">{{ batchMeta.created_at }}</span>
+        </div>
+        <div>
+          <span class="label">来源：</span>
+          <span class="tag" :class="sourceTag(batchMeta.source)">{{ sourceLabel(batchMeta.source) }}</span>
+        </div>
+        <div>
+          <span class="label">公司数：</span>
+          <span class="value">{{ rows.length }}（活跃 {{ activeRowCount }}）</span>
+        </div>
+        <div style="flex:1; display:flex; align-items:center; gap:8px;">
+          <span class="label">备注：</span>
+          <input class="note-input" v-model="note" @blur="saveNote" @keyup.enter="saveNote" placeholder="输入批次备注">
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="card">
+      <div class="toolbar">
+        <button class="btn btn-primary" @click="doQueryTyc" :disabled="querying">
+          {{ querying ? '查询中 (' + progress.tyc.completed + '/' + progress.tyc.total + ')' : '查询天眼查' }}
+          <span class="btn-count" v-if="!querying">{{ countForTyc }}</span>
+        </button>
+
+        <button class="btn btn-success" @click="doCreate" :disabled="creating">
+          {{ creating ? '创建中 (' + progress.create.completed + '/' + progress.create.total + ')' : '创建公司' }}
+          <span class="btn-count" v-if="!creating">{{ countForCreate }}</span>
+        </button>
+
+        <button class="btn btn-warning" @click="doGenerate" :disabled="generating">
+          {{ generating ? '生成中 (' + progress.generate.completed + '/' + progress.generate.total + ')' : '生成爬虫' }}
+          <span class="btn-count" v-if="!generating">{{ countForGenerate }}</span>
+        </button>
+
+        <button class="btn btn-purple" @click="doCrawl" :disabled="crawling">
+          {{ crawling ? '执行中 (' + progress.crawl.completed + '/' + progress.crawl.total + ')' : '执行爬虫' }}
+          <span class="btn-count" v-if="!crawling">{{ countForCrawl }}</span>
+        </button>
+
+        <span style="border-left:1px solid #dcdfe6; height:24px;"></span>
+
+        <button class="btn btn-info" @click="doOneStop" :disabled="oneStopRunning">
+          {{ oneStopRunning ? '执行中...' : '一条龙执行' }}
+        </button>
+
+        <button class="btn btn-danger" @click="doDeleteBatch">删除批次</button>
+      </div>
+
+      <!-- Progress bars -->
+      <template v-for="key in ['tyc', 'create', 'generate', 'crawl']" :key="key">
+        <div v-if="progressActive[key]">
+          <div class="progress-bar"><div class="fill" :style="{width: progressPct[key] + '%'}"></div></div>
+          <div class="progress-text">{{ progressLabels[key] }} {{ progress[key].completed }} / {{ progress[key].total }}（{{ progressPct[key] }}%）</div>
+        </div>
+      </template>
+
+      <div v-if="alertMsg" class="alert" :class="alertType === 'ok' ? 'alert-success' : 'alert-error'">{{ alertMsg }}</div>
+    </div>
+
+    <!-- 异常面板 -->
+    <div class="card" v-if="failedRows.length">
+      <div style="font-size:14px; font-weight:500; margin-bottom:12px;">异常（{{ failedRows.length }}）</div>
+      <div class="issue-tags">
+        <span class="issue-tag tag-red" :class="{active: issueFilter === '创建失败'}" @click="toggleIssueFilter('创建失败')">创建失败({{ failedCounts['创建失败'] || 0 }})</span>
+        <span class="issue-tag tag-red" :class="{active: issueFilter === '生成失败'}" @click="toggleIssueFilter('生成失败')">生成失败({{ failedCounts['生成失败'] || 0 }})</span>
+        <span class="issue-tag tag-red" :class="{active: issueFilter === '执行失败'}" @click="toggleIssueFilter('执行失败')">执行失败({{ failedCounts['执行失败'] || 0 }})</span>
+        <span class="issue-tag tag-orange" :class="{active: issueFilter === '天眼查出错'}" @click="toggleIssueFilter('天眼查出错')">天眼查出错({{ failedCounts['天眼查出错'] || 0 }})</span>
+        <button v-if="issueFilter" class="btn btn-default btn-sm" @click="issueFilter = ''">清除筛选</button>
+        <span style="flex:1;"></span>
+        <button class="btn btn-warning btn-sm" @click="retryFiltered" :disabled="retrying || !filteredFailedRows.length">
+          {{ retrying ? '重试中...' : '批量重试' }}
+          <span class="btn-count">{{ filteredFailedRows.length }}</span>
+        </button>
+      </div>
+      <div class="table-wrap" style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px;">#</th>
+              <th style="min-width:120px;">Name (最终名称)</th>
+              <th style="min-width:150px;">Company Name</th>
+              <th style="min-width:100px;">Credit Code</th>
+              <th style="min-width:180px;">URL</th>
+              <th style="min-width:80px;">Site Type</th>
+              <th style="min-width:180px;">Job URL</th>
+              <th style="min-width:120px;">Description</th>
+              <th style="width:100px;">状态</th>
+              <th style="min-width:150px;">错误原因</th>
+              <th style="width:60px;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in filteredFailedRows" :key="r._idx">
+              <td>{{ r._idx + 1 }}</td>
+              <td><input class="issue-input" v-model="rows[r._idx].name" placeholder="最终名称"></td>
+              <td><input class="issue-input" v-model="rows[r._idx].company_name" placeholder="公司全称"></td>
+              <td><input class="issue-input" v-model="rows[r._idx].credit_code" placeholder="信用代码"></td>
+              <td><input class="issue-input" v-model="rows[r._idx].url" placeholder="招聘页URL"></td>
+              <td>
+                <select class="issue-select" v-model="rows[r._idx].site_type">
+                  <option :value="null">-</option>
+                  <option value="auto">auto</option>
+                  <option value="spa">spa</option>
+                  <option value="ssr">ssr</option>
+                </select>
+              </td>
+              <td><input class="issue-input" v-model="rows[r._idx].job_url_example" placeholder="职位详情URL"></td>
+              <td><input class="issue-input" v-model="rows[r._idx].description" placeholder="描述"></td>
+              <td><span class="tag" :class="statusTag(r.status)">{{ r.status }}</span></td>
+              <td style="max-width:150px; word-break:break-all; font-size:12px; color:#f56c6c;">{{ r.error || '' }}</td>
+              <td>
+                <button class="btn btn-warning btn-sm" @click="retryRow(r._idx)" :disabled="retrying" style="padding:2px 8px;">重试</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 公司表格 -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <span style="font-size:14px; color:#606266;">
+          公司列表（共 {{ rows.length }} 条<span v-if="selectedRows.size">，已选 {{ selectedRows.size }} 条</span>）
+        </span>
+        <button class="btn btn-default btn-sm" @click="tableOpen = !tableOpen">
+          {{ tableOpen ? '收起' : '展开' }}
+        </button>
+      </div>
+      <div class="table-wrap" v-show="tableOpen">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px;"><input type="checkbox" :checked="isAllSelected" @change="toggleAll"></th>
+              <th style="width:50px;">#</th>
+              <th>公司全称</th>
+              <th>简称</th>
+              <th>最终名称</th>
+              <th>URL</th>
+              <th v-if="hasChannel">渠道</th>
+              <th>信用代码</th>
+              <th style="width:140px;">状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(r, i) in rows" :key="i"
+                :class="{'row-skipped': r.status === '已存在，跳过', selected: selectedRows.has(i)}">
+              <td><input type="checkbox" :checked="selectedRows.has(i)" @change="toggleRow(i)"></td>
+              <td>{{ i + 1 }}</td>
+              <td>{{ r.company_name }}</td>
+              <td>{{ r.alias || '' }}</td>
+              <td>{{ r.name || '' }}</td>
+              <td style="max-width:250px; word-break:break-all; font-size:12px;">
+                <a v-if="r.url" :href="r.url" target="_blank" style="color:#409eff;">{{ r.url }}</a>
+                <span v-else class="empty-cell">-</span>
+              </td>
+              <td v-if="hasChannel">{{ r.channel || '' }}</td>
+              <td><span v-if="r.credit_code">{{ r.credit_code }}</span><span v-else class="empty-cell">-</span></td>
+              <td><span class="tag" :class="statusTag(r.status)">{{ r.status }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+</div>
+
+<script>
+const { createApp, ref, reactive, computed, onMounted, watch } = Vue
+
+const STATUS_COLORS = {
+  '等待查询天眼查': 'tag-gray',
+  '天眼查已查到': 'tag-green',
+  '天眼查未查到': 'tag-orange',
+  '天眼查出错': 'tag-red',
+  '等待创建公司': 'tag-gray',
+  '创建成功': 'tag-green',
+  '创建失败': 'tag-red',
+  '已跳过(URL重复)': 'tag-gray',
+  '已跳过(名称重复)': 'tag-gray',
+  '已存在，跳过': 'tag-gray',
+  '等待生成爬虫': 'tag-gray',
+  '爬虫生成中': 'tag-blue',
+  '爬虫已生成': 'tag-green',
+  '生成失败': 'tag-red',
+  '等待执行爬虫': 'tag-gray',
+  '爬虫执行中': 'tag-blue',
+  '全部完成': 'tag-green',
+  '执行失败': 'tag-red',
+}
+
+const BATCH_STATUS_COLORS = {
+  '空批次': 'tag-gray',
+  '全部已存在': 'tag-gray',
+  '等待查询天眼查': 'tag-gray',
+  '天眼查已完成': 'tag-green',
+  '公司已创建': 'tag-green',
+  '爬虫已生成': 'tag-green',
+  '全部完成': 'tag-green',
+  '进行中': 'tag-blue',
+}
+
+const PLATFORM_LIST = [
+  { key: 'feishu', label: '飞书招聘', icon: '\u{1F426}' },
+  { key: 'mokahr', label: 'Moka HR', icon: '\u{1F4BC}' },
+  { key: 'dayi', label: '大易招聘', icon: '\u{1F310}' },
+  { key: 'beisen', label: '北森招聘', icon: '\u{1F3E2}' },
+]
+
+const SKIP_STATUSES = new Set(['已存在，跳过', '已跳过(URL重复)', '已跳过(名称重复)'])
+const FAILED_STATUSES = ['创建失败', '生成失败', '执行失败', '天眼查出错']
+
+createApp({
+  setup() {
+    // ── 批次列表状态 ──
+    const batches = ref([])
+    const currentBatchId = ref(null)
+    const platformCounts = ref({})
+    const loadingPlatform = ref(null)
+
+    // ── 批次详情状态 ──
+    const batchMeta = reactive({ created_at: '', source: '', source_detail: '' })
+    const rows = ref([])
+    const note = ref('')
+    const selectedRows = ref(new Set())
+    const tableOpen = ref(true)
+
+    // 操作状态
+    const querying = ref(false)
+    const creating = ref(false)
+    const generating = ref(false)
+    const crawling = ref(false)
+    const oneStopRunning = ref(false)
+    const retrying = ref(false)
+
+    const progress = reactive({
+      tyc: { completed: 0, total: 0 },
+      create: { completed: 0, total: 0 },
+      generate: { completed: 0, total: 0 },
+      crawl: { completed: 0, total: 0 },
+    })
+
+    const progressActive = reactive({ tyc: false, create: false, generate: false, crawl: false })
+    const progressLabels = { tyc: '天眼查查询', create: '创建公司', generate: '生成爬虫', crawl: '执行爬虫' }
+
+    const alertMsg = ref('')
+    const alertType = ref('ok')
+    const issueFilter = ref('')
+
+    // ── 计算属性 ──
+    const hasChannel = computed(() => rows.value.some(r => r.channel))
+
+    const activeRowCount = computed(() => rows.value.filter(r => !SKIP_STATUSES.has(r.status)).length)
+
+    const countForTyc = computed(() => {
+      if (selectedRows.value.size) return [...selectedRows.value].filter(i => rows.value[i]?.status === '等待查询天眼查').length
+      return rows.value.filter(r => r.status === '等待查询天眼查').length
+    })
+    const countForCreate = computed(() => {
+      if (selectedRows.value.size) return [...selectedRows.value].filter(i => rows.value[i]?.status === '等待创建公司').length
+      return rows.value.filter(r => r.status === '等待创建公司').length
+    })
+    const countForGenerate = computed(() => {
+      if (selectedRows.value.size) return [...selectedRows.value].filter(i => rows.value[i]?.status === '等待生成爬虫').length
+      return rows.value.filter(r => r.status === '等待生成爬虫').length
+    })
+    const countForCrawl = computed(() => {
+      if (selectedRows.value.size) return [...selectedRows.value].filter(i => rows.value[i]?.status === '等待执行爬虫').length
+      return rows.value.filter(r => r.status === '等待执行爬虫').length
+    })
+
+    const progressPct = computed(() => ({
+      tyc: !progress.tyc.total ? 0 : Math.round(progress.tyc.completed / progress.tyc.total * 100),
+      create: !progress.create.total ? 0 : Math.round(progress.create.completed / progress.create.total * 100),
+      generate: !progress.generate.total ? 0 : Math.round(progress.generate.completed / progress.generate.total * 100),
+      crawl: !progress.crawl.total ? 0 : Math.round(progress.crawl.completed / progress.crawl.total * 100),
+    }))
+
+    const isAllSelected = computed(() => {
+      return rows.value.length > 0 && rows.value.every((_, i) => selectedRows.value.has(i))
+    })
+
+    // 异常行
+    const failedRows = computed(() => {
+      return rows.value
+        .map((r, i) => ({ ...r, _idx: i }))
+        .filter(r => FAILED_STATUSES.includes(r.status))
+    })
+
+    const failedCounts = computed(() => {
+      const counts = {}
+      for (const r of failedRows.value) {
+        counts[r.status] = (counts[r.status] || 0) + 1
+      }
+      return counts
+    })
+
+    const filteredFailedRows = computed(() => {
+      if (!issueFilter.value) return failedRows.value
+      return failedRows.value.filter(r => r.status === issueFilter.value)
+    })
+
+    // ── 工具函数 ──
+    function statusTag(status) { return STATUS_COLORS[status] || 'tag-gray' }
+    function batchStatusTag(status) {
+      if (status.includes('中') && !status.includes('已')) return 'tag-blue'
+      return BATCH_STATUS_COLORS[status] || 'tag-gray'
+    }
+    function sourceTag(s) {
+      if (s === 'csv') return 'tag-blue'
+      return 'tag-purple'
+    }
+    function sourceLabel(s) {
+      if (s === 'csv') return 'CSV'
+      const found = PLATFORM_LIST.find(p => p.key === s)
+      return found ? found.label : s
+    }
+    function toggleAll(e) {
+      const s = new Set(selectedRows.value)
+      if (e.target.checked) { rows.value.forEach((_, i) => s.add(i)) }
+      else { s.clear() }
+      selectedRows.value = s
+    }
+    function toggleRow(i) {
+      const s = new Set(selectedRows.value)
+      if (s.has(i)) s.delete(i); else s.add(i)
+      selectedRows.value = s
+    }
+    function toggleIssueFilter(f) { issueFilter.value = issueFilter.value === f ? '' : f }
+
+    // ── 批次列表操作 ──
+    async function loadBatches() {
+      try {
+        const resp = await fetch('/api/batches')
+        const data = await resp.json()
+        batches.value = data.batches || []
+      } catch {}
+    }
+
+    async function loadPlatformCounts() {
+      try {
+        const resp = await fetch('/api/platforms')
+        const data = await resp.json()
+        platformCounts.value = data.platforms || {}
+      } catch {}
+    }
+
+    async function loadPlatform(platform) {
+      if (loadingPlatform.value) return
+      loadingPlatform.value = platform
+      try {
+        const resp = await fetch(`/api/load/${platform}`, { method: 'POST' })
+        const data = await resp.json()
+        if (data.error) { alert(data.error); return }
+        await enterBatch(data.batch_id)
+      } catch (err) {
+        alert('加载失败: ' + err.message)
+      } finally {
+        loadingPlatform.value = null
+      }
+    }
+
+    async function enterBatch(batchId) {
+      currentBatchId.value = batchId
+      alertMsg.value = ''
+      selectedRows.value = new Set()
+      await loadBatchDetail()
+    }
+
+    async function loadBatchDetail() {
+      try {
+        const resp = await fetch(`/api/batches/${currentBatchId.value}`)
+        const data = await resp.json()
+        if (data.error) { alert(data.error); goBack(); return }
+        batchMeta.created_at = data.created_at || ''
+        batchMeta.source = data.source || ''
+        batchMeta.source_detail = data.source_detail || ''
+        rows.value = data.rows || []
+        note.value = data.note || ''
+      } catch {}
+    }
+
+    function goBack() {
+      currentBatchId.value = null
+      rows.value = []
+      note.value = ''
+      selectedRows.value = new Set()
+      alertMsg.value = ''
+      loadBatches()
+    }
+
+    async function deleteBatch(batchId, rowCount) {
+      if (!confirm(`确定删除此批次（${rowCount} 条记录）？`)) return
+      try {
+        await fetch(`/api/batches/${batchId}`, { method: 'DELETE' })
+        await loadBatches()
+      } catch {}
+    }
+
+    async function saveBatchNote(batchId, noteVal) {
+      try {
+        await fetch(`/api/batches/${batchId}/note`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note: noteVal }),
+        })
+      } catch {}
+    }
+
+    // ── 上传 ──
+    async function onUpload(e) {
+      const f = e.target.files[0]
+      if (!f) return
+      const form = new FormData()
+      form.append('file', f)
+      try {
+        const resp = await fetch('/api/upload', { method: 'POST', body: form })
+        const data = await resp.json()
+        if (data.error) { alert(data.error); return }
+        await enterBatch(data.batch_id)
+      } catch (err) {
+        alert('上传失败: ' + err.message)
+      }
+      e.target.value = ''
+    }
+
+    // ── 备注 ──
+    let noteTimer = null
+    async function saveNote() {
+      if (!currentBatchId.value) return
+      clearTimeout(noteTimer)
+      noteTimer = setTimeout(async () => {
+        await fetch(`/api/batches/${currentBatchId.value}/note`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note: note.value }),
+        })
+      }, 300)
+    }
+
+    // ── SSE 操作通用函数 ──
+    function runSSE(endpoint, progressKey, doneCb, indices) {
+      return new Promise((resolve) => {
+        progressActive[progressKey] = true
+        progress[progressKey].completed = 0
+
+        let url = `/api/batches/${currentBatchId.value}/${endpoint}`
+        if (indices && indices.length) {
+          url += `?indices=${indices.join(',')}`
+        }
+        const es = new EventSource(url)
+
+        es.onmessage = (e) => {
+          const d = JSON.parse(e.data)
+          if (d.type === 'progress') {
+            progress[progressKey].completed = d.completed
+            progress[progressKey].total = d.total
+            if (d.row && d.idx != null) {
+              rows.value[d.idx] = { ...rows.value[d.idx], ...d.row }
+            }
+          } else if (d.type === 'done') {
+            progressActive[progressKey] = false
+            if (d.rows) rows.value = d.rows
+            if (doneCb) doneCb(d)
+            es.close()
+            resolve(d)
+          }
+        }
+        es.onerror = () => {
+          progressActive[progressKey] = false
+          es.close()
+          resolve(null)
+        }
+      })
+    }
+
+    // ── 查询天眼查 ──
+    async function doQueryTyc() {
+      querying.value = true
+      alertMsg.value = ''
+
+      const result = await runSSE('query-tyc', 'tyc', (d) => {
+        alertMsg.value = `天眼查查询完成：${d.success} 查到，${d.not_found} 未查到，${d.error} 出错`
+        alertType.value = 'ok'
+      })
+
+      querying.value = false
+    }
+
+    // ── 创建公司 ──
+    async function doCreate() {
+      creating.value = true
+      alertMsg.value = ''
+
+      const result = await runSSE('create', 'create', (d) => {
+        alertMsg.value = `创建公司完成：${d.created} 创建，${d.skipped} 跳过，${d.failed} 失败`
+        alertType.value = d.failed ? 'err' : 'ok'
+      })
+
+      creating.value = false
+    }
+
+    // ── 生成爬虫 ──
+    async function doGenerate() {
+      generating.value = true
+      alertMsg.value = ''
+
+      const result = await runSSE('generate', 'generate', (d) => {
+        alertMsg.value = `生成爬虫完成：${d.success} 成功，${d.failed} 失败`
+        alertType.value = d.failed ? 'err' : 'ok'
+      })
+
+      generating.value = false
+    }
+
+    // ── 执行爬虫 ──
+    async function doCrawl() {
+      crawling.value = true
+      alertMsg.value = ''
+
+      const result = await runSSE('crawl', 'crawl', (d) => {
+        alertMsg.value = `执行爬虫完成：${d.success} 成功，${d.failed} 失败`
+        alertType.value = d.failed ? 'err' : 'ok'
+      })
+
+      crawling.value = false
+    }
+
+    // ── 一条龙执行 ──
+    async function doOneStop() {
+      oneStopRunning.value = true
+      alertMsg.value = '一条龙执行中：查询天眼查...'
+      alertType.value = 'ok'
+
+      // 1. 查天眼查
+      const hasTyc = rows.value.some(r => r.status === '等待查询天眼查')
+      if (hasTyc) {
+        querying.value = true
+        await runSSE('query-tyc', 'tyc')
+        querying.value = false
+      }
+
+      // 2. 创建公司
+      alertMsg.value = '一条龙执行中：创建公司...'
+      const hasCreate = rows.value.some(r => r.status === '等待创建公司')
+      if (hasCreate) {
+        creating.value = true
+        await runSSE('create', 'create')
+        creating.value = false
+      }
+
+      // 3. 生成爬虫
+      alertMsg.value = '一条龙执行中：生成爬虫...'
+      const hasGenerate = rows.value.some(r => r.status === '等待生成爬虫')
+      if (hasGenerate) {
+        generating.value = true
+        await runSSE('generate', 'generate')
+        generating.value = false
+      }
+
+      // 4. 执行爬虫
+      alertMsg.value = '一条龙执行中：执行爬虫...'
+      const hasCrawl = rows.value.some(r => r.status === '等待执行爬虫')
+      if (hasCrawl) {
+        crawling.value = true
+        await runSSE('crawl', 'crawl')
+        crawling.value = false
+      }
+
+      oneStopRunning.value = false
+      const done = rows.value.filter(r => r.status === '全部完成').length
+      alertMsg.value = `一条龙执行完成！成功 ${done}/${rows.value.length}`
+      alertType.value = 'ok'
+    }
+
+    // ── 重试逻辑 ──
+    // 根据当前失败状态确定应该回退到哪一步
+    function getRetryStartStatus(status) {
+      const stepMap = {
+        '天眼查出错': '等待查询天眼查',
+        '创建失败': '等待创建公司',
+        '生成失败': '等待生成爬虫',
+        '执行失败': '等待执行爬虫',
+      }
+      return stepMap[status] || '等待查询天眼查'
+    }
+
+    // 从指定步骤开始一条龙执行到底
+    async function retryRows(indices) {
+      if (!indices.length) return
+      retrying.value = true
+      alertMsg.value = '重试中...'
+      alertType.value = 'ok'
+
+      // 1. 回退状态并清除错误
+      for (const idx of indices) {
+        const row = rows.value[idx]
+        row.status = getRetryStartStatus(row.status)
+        row.error = null
+      }
+
+      // 2. 保存到服务端
+      await syncStateToServer()
+
+      // 3. 按步骤一条龙执行（仅处理这些行）
+      // 天眼查
+      const tycIndices = indices.filter(i => rows.value[i].status === '等待查询天眼查')
+      if (tycIndices.length) {
+        alertMsg.value = '重试中：查询天眼查...'
+        querying.value = true
+        await runSSE('query-tyc', 'tyc', null, tycIndices)
+        querying.value = false
+      }
+
+      // 创建公司
+      const createIndices = indices.filter(i => rows.value[i].status === '等待创建公司')
+      if (createIndices.length) {
+        alertMsg.value = '重试中：创建公司...'
+        creating.value = true
+        await runSSE('create', 'create', null, createIndices)
+        creating.value = false
+      }
+
+      // 生成爬虫
+      const genIndices = indices.filter(i => rows.value[i].status === '等待生成爬虫')
+      if (genIndices.length) {
+        alertMsg.value = '重试中：生成爬虫...'
+        generating.value = true
+        await runSSE('generate', 'generate', null, genIndices)
+        generating.value = false
+      }
+
+      // 执行爬虫
+      const crawlIndices = indices.filter(i => rows.value[i].status === '等待执行爬虫')
+      if (crawlIndices.length) {
+        alertMsg.value = '重试中：执行爬虫...'
+        crawling.value = true
+        await runSSE('crawl', 'crawl', null, crawlIndices)
+        crawling.value = false
+      }
+
+      retrying.value = false
+      const doneCount = indices.filter(i => rows.value[i].status === '全部完成').length
+      alertMsg.value = `重试完成！成功 ${doneCount}/${indices.length}`
+      alertType.value = doneCount === indices.length ? 'ok' : 'err'
+    }
+
+    async function retryRow(idx) {
+      await retryRows([idx])
+    }
+
+    async function retryFiltered() {
+      const indices = filteredFailedRows.value.map(r => r._idx)
+      await retryRows(indices)
+    }
+
+    // ── 删除批次 ──
+    async function doDeleteBatch() {
+      if (!confirm(`确定删除当前批次（${rows.value.length} 条记录）？`)) return
+      try {
+        await fetch(`/api/batches/${currentBatchId.value}`, { method: 'DELETE' })
+        goBack()
+      } catch {}
+    }
+
+    async function syncStateToServer() {
+      if (!currentBatchId.value) return
+      await fetch(`/api/batches/${currentBatchId.value}/save-rows`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: rows.value }),
+      })
+    }
+
+    // ── 页面加载 ──
+    onMounted(async () => {
+      await Promise.all([loadBatches(), loadPlatformCounts()])
+    })
+
+    return {
+      // 批次列表
+      batches, currentBatchId, platformCounts, loadingPlatform,
+      platformList: PLATFORM_LIST,
+      loadBatches, loadPlatformCounts, loadPlatform,
+      enterBatch, goBack, deleteBatch, saveBatchNote,
+      onUpload, sourceTag, sourceLabel, batchStatusTag,
+      // 批次详情
+      batchMeta, rows, note, selectedRows, tableOpen, hasChannel,
+      activeRowCount,
+      querying, creating, generating, crawling, oneStopRunning,
+      progress, progressActive, progressPct, progressLabels,
+      countForTyc, countForCreate, countForGenerate, countForCrawl,
+      isAllSelected, alertMsg, alertType,
+      statusTag, toggleAll, toggleRow, saveNote,
+      doQueryTyc, doCreate, doGenerate, doCrawl, doOneStop, doDeleteBatch,
+      // 异常面板
+      failedRows, failedCounts, filteredFailedRows, issueFilter, toggleIssueFilter,
+      retrying, retryRow, retryFiltered,
+    }
+  }
+}).mount('#app')
+</script>
+</body>
+</html>
